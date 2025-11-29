@@ -83,8 +83,24 @@ def _is_numeric_text(text: str) -> bool:
 
 def _safe_float(token: str) -> float:
     cleaned = token.strip()
+    
+    # Handle "448 00" -> "448.00" case (common OCR error where dot is read as space)
+    # Heuristic: If there is a space and the last part is exactly 2 digits, treat as decimal.
+    if " " in cleaned:
+        parts = cleaned.split()
+        if len(parts) >= 2 and len(parts[-1]) == 2 and parts[-1].isdigit():
+            # Reconstruct with dot
+            cleaned = "".join(parts[:-1]) + "." + parts[-1]
+    
     for symbol in CURRENCY_SYMBOLS:
         cleaned = cleaned.replace(symbol, "")
+    
+    # Handle European style 12,34 -> 12.34 if it looks like that
+    if "," in cleaned and "." not in cleaned:
+        parts = cleaned.split(",")
+        if len(parts) == 2 and len(parts[1]) == 2:
+             cleaned = cleaned.replace(",", ".")
+
     cleaned = cleaned.replace(",", "").replace(" ", "")
     cleaned = cleaned.replace("..", ".")
     cleaned = cleaned.replace("|", "")
@@ -231,7 +247,8 @@ def _merge_adjacent_numeric_tokens(row: List[Dict[str, Any]], gap: float = 18.0)
                 and _is_numeric_text(nxt["text"])
                 and nxt["left"] - (current["left"] + current["width"]) <= gap
             ):
-                text = f"{text}{nxt['text']}"
+                # Join with space to preserve separation for _safe_float heuristics
+                text = f"{text} {nxt['text']}"
                 current["text"] = text
                 current["width"] = (nxt["left"] + nxt["width"]) - current["left"]
                 current["center_x"] = current["left"] + current["width"] / 2
