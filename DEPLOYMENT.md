@@ -5,7 +5,7 @@
 For your hackathon submission, I recommend **Render** because:
 - ✅ Free tier available (no credit card required)
 - ✅ Easy GitHub integration
-- ✅ Supports system dependencies (Tesseract, Poppler)
+- ✅ Supports Docker (for system dependencies like Tesseract, Poppler)
 - ✅ Provides HTTPS out of the box
 - ✅ Your webhook URL will be: `https://your-app-name.onrender.com/extract-bill-data`
 
@@ -15,13 +15,9 @@ For your hackathon submission, I recommend **Render** because:
 
 1. **Push your code to GitHub**
    ```bash
-   cd d:/PROJECTS/Devanand_Bajaj_Finserv
-   git init
    git add .
-   git commit -m "Initial commit - Medical bill extraction API"
-   # Create a new repo on GitHub, then:
-   git remote add origin https://github.com/YOUR_USERNAME/bajaj-finserv-api.git
-   git push -u origin main
+   git commit -m "Add Docker configuration for Render deployment"
+   git push
    ```
 
 2. **Sign up for Render**
@@ -35,16 +31,11 @@ For your hackathon submission, I recommend **Render** because:
 
 4. **Configure the service**
    - **Name**: `bajaj-extraction-api` (or any name you prefer)
-   - **Environment**: `Python 3`
-   - **Build Command**: 
-     ```bash
-     apt-get update && apt-get install -y tesseract-ocr poppler-utils && pip install -r requirements.txt
-     ```
-   - **Start Command**: 
-     ```bash
-     uvicorn app:app --host 0.0.0.0 --port $PORT
-     ```
+   - **Environment**: `Docker`
+   - **Dockerfile Path**: `./Dockerfile`
    - **Plan**: Free
+
+   > **Note**: Render will automatically detect the `render.yaml` file and use Docker to build your application with all required system dependencies (tesseract-ocr, poppler-utils).
 
 5. **Deploy**
    - Click "Create Web Service"
@@ -59,6 +50,7 @@ For your hackathon submission, I recommend **Render** because:
    ```
 
 7. **Submit this URL**: `https://bajaj-extraction-api.onrender.com/extract-bill-data`
+
 
 ---
 
