@@ -545,6 +545,22 @@ def _clean_description(text: str) -> str:
     return text.strip()
 
 
+IGNORED_PHRASES = {
+    "room charges",
+    "nursing care",
+    "laboratory services",
+    "consultation",
+    "surgery-procedure charges",
+    "surgery procedure charges",
+    "page of",
+    "printed on",
+    "particulars",
+    "amount",
+    "rate",
+    "qty",
+}
+
+
 def extract_page_line_items(boxes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert OCR boxes into structured line items using layout-aware heuristics."""
     if not boxes:
@@ -578,7 +594,16 @@ def extract_page_line_items(boxes: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         # Check for Total rows
         lower_text = row_text.lower()
         if any(keyword in lower_text for keyword in ["total", "grand total", "net amount", "amount due"]):
-            # This is likely a summary row, skip it
+            continue
+
+        # Check for Ignored Phrases (Headers/Footers)
+        # We check if the cleaned text matches exactly or is very close
+        clean_check = _clean_description(lower_text)
+        if clean_check in IGNORED_PHRASES:
+            continue
+            
+        # Also check if it starts with "Page of"
+        if lower_text.startswith("page of") or lower_text.startswith("printed on"):
             continue
 
         if not numeric_tokens:
@@ -595,6 +620,10 @@ def extract_page_line_items(boxes: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         description = _clean_description(description)
         if not description:
              continue
+             
+        # Double check description after cleaning against ignored phrases
+        if description.lower() in IGNORED_PHRASES:
+            continue
 
         numeric_values = _assign_numeric_columns(numeric_tokens, header_roles, fallback_centers)
         numeric_values = _derive_columns_from_values(numeric_tokens, numeric_values)
