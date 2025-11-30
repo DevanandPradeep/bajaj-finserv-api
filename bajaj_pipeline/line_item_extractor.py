@@ -443,6 +443,31 @@ def _derive_columns_from_values(
     return values
 
 
+def _clean_description(text: str) -> str:
+    """Remove noise, dates, and special characters from description."""
+    # Remove dates (DD/MM/YYYY or DD-MM-YYYY)
+    text = re.sub(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", "", text)
+    
+    # Remove common noise symbols
+    text = re.sub(r"[~_»|—]", "", text)
+    
+    # Remove standalone special characters (e.g. " . " or " : ")
+    text = re.sub(r"\s+[^a-zA-Z0-9()]\s+", " ", text)
+    
+    # Remove common header artifacts that leak into rows
+    # Case insensitive replacement
+    for term in ["particulars", "date", "aly", "amount"]:
+        text = re.sub(r"\b" + term + r"\b", "", text, flags=re.IGNORECASE)
+    
+    # Remove leading/trailing punctuation
+    text = text.strip(" .,:;-")
+    
+    # Collapse multiple spaces
+    text = re.sub(r"\s+", " ", text)
+    
+    return text.strip()
+
+
 def _finalize_item(
     name: str, numeric_values: Dict[str, float], tolerance: float = 0.02
 ) -> Tuple[str, float, float, float]:
@@ -452,64 +477,44 @@ def _finalize_item(
     rate = numeric_values.get("rate")
     quantity = numeric_values.get("quantity")
 
-    if amount is None and rate is not None and quantity is not None:
+    # 1. Heal missing/zero Amount if we have Rate and Quantity
+    if (amount is None or amount == 0) and rate is not None and quantity is not None:
         amount = rate * quantity
 
+    # 2. Heal missing Rate
     if amount is not None and rate is None and quantity is not None and quantity not in (0, 0.0):
         rate = amount / quantity
 
+    # 3. Heal missing Quantity
     if amount is not None and rate is not None and quantity is None and rate not in (0, 0.0):
         quantity = amount / rate
 
-    if amount is not None and rate is None and quantity is None:
-        rate = amount
-        quantity = 1.0
-
+    # 4. Fallback: If only Rate exists, assume Qty=1
     if amount is None and rate is not None and quantity is None:
         amount = rate
         quantity = 1.0
 
-    if amount is None:
-        # If we still don't have an amount, we can't do much.
-        # But maybe we have rate and quantity?
-        if rate is not None and quantity is not None:
-             amount = rate * quantity
-        else:
-             # Last ditch: if we have a rate, assume qty 1
-             if rate is not None:
-                 amount = rate
-                 quantity = 1.0
-             else:
-                 raise ValueError("Missing amount")
+    # 5. Fallback: If only Amount exists, assume Qty=1, Rate=Amount
+    if amount is not None and rate is None and quantity is None:
+        rate = amount
+        quantity = 1.0
 
-    if rate is None:
-        if quantity is not None and quantity != 0:
-            rate = amount / quantity
-        else:
-            rate = amount
-            quantity = 1.0
+    # Final cleanup of None values
+    if amount is None: amount = 0.0
+    if rate is None: rate = 0.0
+    if quantity is None: quantity = 1.0
 
-    if quantity is None:
-        if rate is not None and rate != 0:
-            quantity = amount / rate
-        else:
-            quantity = 1.0
-
-    # Final consistency check
-    computed_amount = rate * quantity
-    if not math.isclose(computed_amount, amount, rel_tol=tolerance, abs_tol=0.05):
-        # If the mismatch is huge, trust the explicit amount and adjust rate/qty?
-        # Or trust rate*qty?
-        # Usually "Amount" column is the source of truth for billing.
-        # But if Amount is OCR'd wrong, Rate*Qty might be better.
-        # Let's assume Amount is primary, but warn.
-        # Actually, if we calculated Rate or Qty, we should recalculate to be consistent.
-        
-        # If we derived Rate from Amount/Qty, it should match.
-        # If we derived Qty from Amount/Rate, it should match.
-        # If we had all 3 and they don't match, we have a problem.
-        
-        # Let's trust Amount as the ground truth for the total.
+    # Consistency Check & Force Correction
+    # If we have all three, ensure Amount = Rate * Qty
+    # We trust Rate * Qty more than Amount if Amount seems wrong (e.g. 0)
+    calc_amount = rate * quantity
+    if amount == 0 and calc_amount > 0:
+        amount = calc_amount
+    elif amount > 0 and calc_amount > 0 and not math.isclose(amount, calc_amount, rel_tol=tolerance):
+        # Mismatch. Usually Amount is truth, but if Rate*Qty is clean integer math, it might be better.
+        # For now, let's trust the calculated amount if the extracted amount is suspicious?
+        # No, usually Amount is the most important field.
+        # But for the "X-Ray" case, Amount was 0. We handled that above.
         pass
 
     return (
