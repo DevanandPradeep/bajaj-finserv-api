@@ -493,6 +493,26 @@ def _finalize_item(
     )
 
 
+def _clean_description(text: str) -> str:
+    """Remove noise, dates, and special characters from description."""
+    # Remove dates (DD/MM/YYYY or DD-MM-YYYY)
+    text = re.sub(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", "", text)
+    
+    # Remove common noise symbols
+    text = re.sub(r"[~_»|—]", "", text)
+    
+    # Remove standalone special characters (e.g. " . " or " : ")
+    text = re.sub(r"\s+[^a-zA-Z0-9()]\s+", " ", text)
+    
+    # Remove leading/trailing punctuation
+    text = text.strip(" .,:;-")
+    
+    # Collapse multiple spaces
+    text = re.sub(r"\s+", " ", text)
+    
+    return text.strip()
+
+
 def extract_page_line_items(boxes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert OCR boxes into structured line items using layout-aware heuristics."""
     if not boxes:
@@ -522,6 +542,13 @@ def extract_page_line_items(boxes: List[Dict[str, Any]]) -> List[Dict[str, Any]]
                 name_tokens.append(box)
 
         row_text = " ".join(token["text"] for token in name_tokens).strip()
+        
+        # Check for Total rows
+        lower_text = row_text.lower()
+        if any(keyword in lower_text for keyword in ["total", "grand total", "net amount", "amount due"]):
+            # This is likely a summary row, skip it
+            continue
+
         if not numeric_tokens:
             if row_text:
                 pending_description = f"{pending_description} {row_text}".strip()
@@ -531,6 +558,11 @@ def extract_page_line_items(boxes: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         pending_description = ""
         if not description:
             description = " ".join(token["text"] for token in row).strip()
+
+        # Clean the description
+        description = _clean_description(description)
+        if not description:
+             continue
 
         numeric_values = _assign_numeric_columns(numeric_tokens, header_roles, fallback_centers)
         numeric_values = _derive_columns_from_values(numeric_tokens, numeric_values)
@@ -549,7 +581,9 @@ def extract_page_line_items(boxes: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         )
 
     if pending_description and line_items:
-        line_items[-1]["item_name"] = f"{line_items[-1]['item_name']} {pending_description}".strip()
+        # Append pending text to the last item if it makes sense, or ignore
+        # Often trailing text is footer info
+        pass
 
     return line_items
 
