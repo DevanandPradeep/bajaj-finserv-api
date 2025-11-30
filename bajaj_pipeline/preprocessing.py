@@ -149,7 +149,7 @@ def preprocess_page(image: Image.Image) -> Image.Image:
     gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
     
     # 2. Deskew
-    # gray = _deskew(gray) # Optional: can be risky if few lines
+    gray = _deskew(gray)
     
     # 3. Noise Reduction (Gaussian Blur)
     # Removes high frequency noise

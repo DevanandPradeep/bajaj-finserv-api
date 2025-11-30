@@ -152,24 +152,51 @@ def _normalize_box(box: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _cluster_rows(boxes: Sequence[Dict[str, Any]], y_tolerance: int = 12) -> List[List[Dict[str, Any]]]:
-    """Group boxes into rows using their vertical centers."""
-    sorted_boxes = sorted((b for b in boxes if b["text"]), key=lambda b: (b["center_y"], b["left"]))
+def _cluster_rows(boxes: Sequence[Dict[str, Any]], y_tolerance: int = 8) -> List[List[Dict[str, Any]]]:
+    """Group boxes into rows using their vertical centers and overlap."""
+    # Sort by top first to process from top-down
+    sorted_boxes = sorted((b for b in boxes if b["text"]), key=lambda b: b["top"])
     rows: List[List[Dict[str, Any]]] = []
-    current_row: List[Dict[str, Any]] = []
-    current_y: float | None = None
 
     for box in sorted_boxes:
-        if current_y is None or abs(box["center_y"] - current_y) <= y_tolerance:
-            current_row.append(box)
-            current_y = box["center_y"] if current_y is None else (current_y + box["center_y"]) / 2
-        else:
-            rows.append(sorted(current_row, key=lambda b: b["left"]))
-            current_row = [box]
-            current_y = box["center_y"]
+        matched = False
+        box_cy = box["center_y"]
+        box_height = box["height"]
 
-    if current_row:
-        rows.append(sorted(current_row, key=lambda b: b["left"]))
+        for row in rows:
+            # Calculate row stats
+            row_cy = sum(b["center_y"] for b in row) / len(row)
+            
+            # Check vertical center proximity
+            if abs(box_cy - row_cy) <= y_tolerance:
+                row.append(box)
+                matched = True
+                break
+            
+            # Check significant vertical overlap
+            # If the box overlaps more than 50% with the row's vertical span
+            row_top = min(b["top"] for b in row)
+            row_bottom = max(b["bottom"] for b in row)
+            
+            overlap_start = max(row_top, box["top"])
+            overlap_end = min(row_bottom, box["bottom"])
+            overlap = max(0, overlap_end - overlap_start)
+            
+            if box_height > 0 and (overlap / box_height) > 0.6:
+                row.append(box)
+                matched = True
+                break
+
+        if not matched:
+            rows.append([box])
+
+    # Sort boxes within each row by left coordinate
+    for row in rows:
+        row.sort(key=lambda b: b["left"])
+        
+    # Sort rows by vertical position
+    rows.sort(key=lambda r: sum(b["center_y"] for b in r) / len(r))
+    
     return rows
 
 
