@@ -75,14 +75,6 @@ async def extract_bill_data(request: DocumentRequest):
                 # Default to "Bill Detail" for now - this can be enhanced with ML classification
                 page["page_type"] = "Bill Detail"
         
-        # Add token_usage (currently 0 as we're not using LLM)
-        # This will be updated when LLM integration is added
-        response_data["token_usage"] = {
-            "total_tokens": 0,
-            "input_tokens": 0,
-            "output_tokens": 0
-        }
-        
         logger.info("Extraction successful")
         return response_data
         
@@ -90,11 +82,6 @@ async def extract_bill_data(request: DocumentRequest):
         logger.error(f"Extraction failed: {str(e)}", exc_info=True)
         return {
             "is_success": False,
-            "token_usage": {
-                "total_tokens": 0,
-                "input_tokens": 0,
-                "output_tokens": 0
-            },
             "error": str(e)
         }
 
